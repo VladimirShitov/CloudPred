@@ -14,7 +14,7 @@ def train(Xtrain, Xvalid, centers=2, regression=False):
     for X, *_ in Xtrain:
         gm.append(X)
 
-    gm = np.concatenate(gm)
+    gm = np.asarray(np.concatenate(gm))
     model = sklearn.mixture.GaussianMixture(n_components=centers, covariance_type="diag")
     gm = model.fit(gm)
 
