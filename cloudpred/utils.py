@@ -452,7 +452,7 @@ def setup_logging(logfile=None, loglevel=logging.DEBUG):
     pathlib.Path(os.path.dirname(logfile)).mkdir(parents=True, exist_ok=True)
 
     cfg = dict(
-          version=1.01,
+          version=1,
           formatters={
               "f": {"()":
                         "cloudpred.utils.MultilineFormatter",
