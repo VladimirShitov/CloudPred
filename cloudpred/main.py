@@ -81,9 +81,9 @@ def main(args=None):
             Xtest  = list(map(lambda x: (x[0].todense(), *x[1:]), Xtest))
         logger.debug("Transforming data took " + str(time.time() - t))
 
-        Xtrain = np.asarray(Xtrain)
-        Xvalid = np.asarray(Xvalid)
-        Xtest = np.asarray(Xtest)
+        Xtrain = Xtrain
+        Xvalid = Xvalid
+        Xtest = Xtest
 
         ### Train model ###
         if args.cloudpred:

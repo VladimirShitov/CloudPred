@@ -50,6 +50,8 @@ def train(Xtrain, Xvalid, centers=2, regression=False):
             z = classifier.pl(X)
             if regression:
                 z = z[:, 1]
+            logger.debug(f"z: {z}")
+            logger.debug(f"y: {y}")
             loss = criterion(z, y)
 
             optimizer.zero_grad()
