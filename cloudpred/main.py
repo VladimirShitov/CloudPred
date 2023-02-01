@@ -3,7 +3,6 @@ import math
 import scipy
 import torch
 import cloudpred
-import datetime
 import os
 import logging.config
 import traceback
@@ -82,6 +81,9 @@ def main(args=None):
             Xtest  = list(map(lambda x: (x[0].todense(), *x[1:]), Xtest))
         logger.debug("Transforming data took " + str(time.time() - t))
 
+        Xtrain = Xtrain
+        Xvalid = Xvalid
+        Xtest = Xtest
 
         ### Train model ###
         if args.cloudpred:

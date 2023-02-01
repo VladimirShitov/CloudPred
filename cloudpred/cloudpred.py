@@ -14,7 +14,7 @@ def train(Xtrain, Xvalid, centers=2, regression=False):
     for X, *_ in Xtrain:
         gm.append(X)
 
-    gm = np.concatenate(gm)
+    gm = np.asarray(np.concatenate(gm))
     model = sklearn.mixture.GaussianMixture(n_components=centers, covariance_type="diag")
     gm = model.fit(gm)
 
@@ -50,6 +50,8 @@ def train(Xtrain, Xvalid, centers=2, regression=False):
             z = classifier.pl(X)
             if regression:
                 z = z[:, 1]
+            logger.debug(f"z: {z}")
+            logger.debug(f"y: {y}")
             loss = criterion(z, y)
 
             optimizer.zero_grad()
