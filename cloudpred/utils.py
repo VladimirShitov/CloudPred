@@ -18,7 +18,19 @@ import pathlib
 import tqdm
 
 
-def load_counts(filename):
+def load_counts(filename) -> tuple:
+    """Loads count and cell type data from the directory
+    
+    Parameters
+    ----------
+    filename : Path-like
+        Full path to a file with counts data. File with cell types supposed to be named in the same way
+        with prefix "ct_"
+    
+    Returns
+    -------
+    Tuple with counts (transposed for whatever reason), and cell types vector or None if this file was not found
+    """
     counts = scipy.sparse.load_npz(filename)
     counts = counts.astype(np.float)
 
