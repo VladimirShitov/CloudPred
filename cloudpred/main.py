@@ -1,20 +1,95 @@
+from typing import Literal
 import copy
 import math
-import scipy
-import torch
-import cloudpred
 import os
-import logging.config
 import traceback
 import random
-import numpy as np
 import time
+import pickle
+
+import scipy
+import torch
+import logging.config
+import numpy as np
 import pathlib
 import seaborn as sns
-import pickle
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+
+import cloudpred
+
+
+def log_transform(data) -> list[tuple]:
+    """Apply log transformation to the first element of the data
+    
+    Parameters
+    ----------
+    data : Iterable
+        Each element consists of 3 elements:
+        1. Cells expression data to be log transformed
+        2. Cell label (e.g. disease)
+        3. Cell type
+
+    Returns
+    -------
+    List with the same format where the expression data is log1p transformed
+    """
+    return [(np.log1p(x[0]), *x[1: ]) for x in data]
+    
+
+def load_and_transform_data(data_dir, transform: Literal["none", "log"], pc: bool = True, dims: int = 50,
+                            valid_size: float = .25, test_size: float = .25, train_patients=None, cells=None,
+                            seed=0, logger=None, figroot="./"):
+    t = time.time()
+    Xtrain, Xvalid, Xtest, state = cloudpred.utils.load_synthetic(data_dir, valid=valid_size, test=test_size,
+                                                                  train_patients=train_patients, cells=cells)
+    logger.debug("Loading data took " + str(time.time() - t))
+
+    t = time.time()
+    if transform == "none":
+        pass
+    elif transform == "log":
+        Xtrain = log_transform(Xtrain)
+        Xvalid = log_transform(Xvalid)
+        Xtest  = log_transform(Xtest)
+    else:
+        raise NotImplementedError("Transform " + transform + " is not implemented.")
+
+    if pc:
+        iterations = 5
+        try:
+            pc = np.load(f"{data_dir}/pc_{transform}_{seed}_{dims}_{iterations}.npz")["pc"]
+        except FileNotFoundError:
+            pc = cloudpred.utils.train_pca_autoencoder(scipy.sparse.vstack(map(lambda x: x[0], Xtrain)), None,
+                                                       scipy.sparse.vstack(map(lambda x: x[0], Xvalid)), None,
+                                                       dims, transform,
+                                                       iterations=iterations,
+                                                       figroot=figroot)
+            np.savez_compressed(f"{data_dir}/pc_{transform}_{seed}_{dims}_{iterations}.npz", pc=pc)
+
+        pc = pc[:, :dims]
+
+        ### Project onto principal components ###
+        mu = scipy.sparse.vstack(list(map(lambda x: x[0], Xtrain))).mean(axis=0)
+        Xtrain = list(map(lambda x: (x[0].dot(pc) - np.matmul(mu, pc), *x[1:]), Xtrain))  # - np.asarray(mu.dot(pc))
+        Xvalid = list(map(lambda x: (x[0].dot(pc) - np.matmul(mu, pc), *x[1:]), Xvalid))  # - np.asarray(mu.dot(pc))
+        Xtest  = list(map(lambda x: (x[0].dot(pc) - np.matmul(mu, pc), *x[1:]), Xtest))   # - np.asarray(mu.dot(pc))
+        full = np.concatenate(list(map(lambda x: x[0], Xtrain)))
+        mu = np.mean(full, axis=0)
+        sigma = np.sqrt(np.mean(np.square(full - mu), axis=0))
+        sigma = sigma[0, 0]
+        Xtrain = list(map(lambda x: ((x[0] - mu) / sigma, *x[1:]), Xtrain))  # - np.asarray(mu.dot(pc))
+        Xvalid = list(map(lambda x: ((x[0] - mu) / sigma, *x[1:]), Xvalid))  # - np.asarray(mu.dot(pc))
+        Xtest  = list(map(lambda x: ((x[0] - mu) / sigma, *x[1:]), Xtest))   # - np.asarray(mu.dot(pc))
+    else:
+        Xtrain = list(map(lambda x: (x[0].todense(), *x[1:]), Xtrain))
+        Xvalid = list(map(lambda x: (x[0].todense(), *x[1:]), Xvalid))
+        Xtest  = list(map(lambda x: (x[0].todense(), *x[1:]), Xtest))
+    logger.debug("Transforming data took " + str(time.time() - t))
+
+    return Xtrain, Xvalid, Xtest, state
+    
 
 def main(args=None):
 
@@ -31,60 +106,10 @@ def main(args=None):
         np.random.seed(args.seed)
         torch.manual_seed(args.seed)
 
-        t = time.time()
-        Xtrain, Xvalid, Xtest, state = cloudpred.utils.load_synthetic(args.dir, valid=args.valid, test=args.test, train_patients=args.train_patients, cells=args.cells)
-        logger.debug("Loading data took " + str(time.time() - t))
-
-        ### Transform data ###
-        t = time.time()
-        if args.transform == "none":
-            pass
-        elif args.transform == "log":
-            Xtrain = list(map(lambda x: (x[0].log1p(), *x[1:]), Xtrain))
-            Xvalid = list(map(lambda x: (x[0].log1p(), *x[1:]), Xvalid))
-            Xtest  = list(map(lambda x: (x[0].log1p(), *x[1:]), Xtest))
-        else:
-            message = "Transform " + args.transform + " is not implemented."
-            raise NotImplementedError(message)
-
-        if args.pc:
-            dims = 50
-            iterations = 5
-            try:
-                pc = np.load(args.dir + "/pc_" + args.transform + "_" + str(args.seed) + "_" + str(args.dims) + "_" + str(iterations) + ".npz")["pc"]
-            except FileNotFoundError:
-                pc = cloudpred.utils.train_pca_autoencoder(scipy.sparse.vstack(map(lambda x: x[0], Xtrain)), None,
-                                                           scipy.sparse.vstack(map(lambda x: x[0], Xvalid)), None,
-                                                           args.dims, args.transform,
-                                                           iterations=iterations,
-                                                           figroot=args.figroot) # TODO: get rid of figroot?
-                np.savez_compressed(args.dir + "/pc_" + args.transform + "_" + str(args.seed) + "_" + str(args.dims) + "_" + str(iterations) + ".npz",
-                                    pc=pc)
-
-            pc = pc[:, :args.dims]
-
-            ### Project onto principal components ###
-            mu = scipy.sparse.vstack(list(map(lambda x: x[0], Xtrain))).mean(axis=0)
-            Xtrain = list(map(lambda x: (x[0].dot(pc) - np.matmul(mu, pc), *x[1:]), Xtrain))  # - np.asarray(mu.dot(pc))
-            Xvalid = list(map(lambda x: (x[0].dot(pc) - np.matmul(mu, pc), *x[1:]), Xvalid))  # - np.asarray(mu.dot(pc))
-            Xtest  = list(map(lambda x: (x[0].dot(pc) - np.matmul(mu, pc), *x[1:]), Xtest))   # - np.asarray(mu.dot(pc))
-            full = np.concatenate(list(map(lambda x: x[0], Xtrain)))
-            mu = np.mean(full, axis=0)
-            sigma = np.sqrt(np.mean(np.square(full - mu), axis=0))
-            sigma = sigma[0, 0]
-            Xtrain = list(map(lambda x: ((x[0] - mu) / sigma, *x[1:]), Xtrain))  # - np.asarray(mu.dot(pc))
-            Xvalid = list(map(lambda x: ((x[0] - mu) / sigma, *x[1:]), Xvalid))  # - np.asarray(mu.dot(pc))
-            Xtest  = list(map(lambda x: ((x[0] - mu) / sigma, *x[1:]), Xtest))   # - np.asarray(mu.dot(pc))
-        else:
-            Xtrain = list(map(lambda x: (x[0].todense(), *x[1:]), Xtrain))
-            Xvalid = list(map(lambda x: (x[0].todense(), *x[1:]), Xvalid))
-            Xtest  = list(map(lambda x: (x[0].todense(), *x[1:]), Xtest))
-        logger.debug("Transforming data took " + str(time.time() - t))
-
-        Xtrain = Xtrain
-        Xvalid = Xvalid
-        Xtest = Xtest
-
+        Xtrain, Xvalid, Xtest, state = load_and_transform_data(
+            data_dir=args.dir, transform=args.transform, pc=args.pc, dims=args.dims, valid_size=args.valid, 
+            test_size=args.test, train_patients=args.train_patients, figroot=args.figroot)
+        
         ### Train model ###
         if args.cloudpred:
             best_model = None
