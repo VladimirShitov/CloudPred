@@ -67,7 +67,7 @@ def load_synthetic(root, valid=0.25, test=0.25, train_patients=None, cells=None)
                     X = []
                     for filename in tqdm.tqdm(sorted(glob.iglob(dirname + "/*.npz"))):
                         X.append(load_counts(filename))
-                    X = list(map(lambda x: (x[0], len(state), x[1]), X))
+                    X = [(x[0], len(state), x[1]) for x in X]
                     state.append(os.path.basename(dirname))
                     Xall.append(X)
         with open(root + "/Xall.pkl", "wb") as f:
