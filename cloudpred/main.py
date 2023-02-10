@@ -354,7 +354,7 @@ def run_pipeline(data_dir, dims, pc, valid_size, test_size, train_patients, cent
 
     Xtrain, Xvalid, Xtest, state = load_and_transform_data(
         data_dir=data_dir, transform=transform, pc=pc, dims=dims, valid_size=valid_size, 
-        test_size=test_size, train_patients=train_patients, figroot=figroot)
+        test_size=test_size, train_patients=train_patients, figroot=figroot, logger=logger)
     
     ### Train model ###
     if cloudpred:
