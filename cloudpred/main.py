@@ -343,6 +343,48 @@ def eval_deepset(best_model, Xtest, regression, logger):
     return res
 
 
+def run_pipeline(data_dir, dims, pc, valid_size, test_size, train_patients, centers, regression, transform, cloudpred, linear, generative, genpat, deepset, seed, figroot, logger=None):
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    # Seeding RNGs
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+    Xtrain, Xvalid, Xtest, state = load_and_transform_data(
+        data_dir=data_dir, transform=transform, pc=pc, dims=dims, valid_size=valid_size, 
+        test_size=test_size, train_patients=train_patients, figroot=figroot)
+    
+    ### Train model ###
+    if cloudpred:
+        best_model, best_score, best_centers = train_model(Xtrain=Xtrain, Xvalid=Xvalid, centers=centers, regression=regression)
+        
+        if figroot is not None:
+            save_figures(figroot=figroot, Xtest=Xtest, Xvalid=Xvalid, best_model=best_model, regression=regression, logger=logger)
+
+        res = eval_cloudpred(best_model=best_model, Xtest=Xtest, best_centers=best_centers, regression=regression, logger=logger)
+
+    ### Basic classifier ###
+    if linear:
+        model, res = train_linear(Xtrain=Xtrain, Xtest=Xtest, state=state, regression=regression, logger=logger)
+
+    ### Generative models ###
+    if generative:
+        best_model = train_generative(Xtrain=Xtrain, Xvalid=Xvalid, centers=centers, logger=logger)
+
+        res = eval_generative(best_model=best_model, Xtest=Xtest, logger=logger)
+
+    if genpat:
+        best_model = train_genpat(Xtrain=Xtrain, Xvalid=Xvalid, centers=centers, logger=logger)
+        res = eval_genpat(best_model=best_model, Xtest=Xtest, logger=logger)
+
+
+    if args.deepset:
+        best_model = train_deepset(Xtrain=Xtrain, Xvalid=Xvalid, centers=centers, regression=regression)
+        res = eval_deepset(best_model=best_model, Xtest=Xtest, regression=regression, logger=logger)
+
+
 def main(args=None):
 
     # Parse command line arguments and set up logging
@@ -353,42 +395,9 @@ def main(args=None):
     logger.info(args)
 
     try:
-        # Seeding RNGs
-        random.seed(args.seed)
-        np.random.seed(args.seed)
-        torch.manual_seed(args.seed)
-
-        Xtrain, Xvalid, Xtest, state = load_and_transform_data(
-            data_dir=args.dir, transform=args.transform, pc=args.pc, dims=args.dims, valid_size=args.valid, 
-            test_size=args.test, train_patients=args.train_patients, figroot=args.figroot)
-        
-        ### Train model ###
-        if args.cloudpred:
-            best_model, best_score, best_centers = train_model(Xtrain=Xtrain, Xvalid=Xvalid, centers=args.centers, regression=args.regression)
-            
-            if args.figroot is not None:
-                save_figures(figroot=args.figroot, Xtest=Xtest, Xvalid=Xvalid, best_model=best_model, regression=args.regression, logger=logger)
-
-            res = eval_cloudpred(best_model=best_model, Xtest=Xtest, best_centers=best_centers, regression=args.regression, logger=logger)
-
-        ### Basic classifier ###
-        if args.linear:
-            model, res = train_linear(Xtrain=Xtrain, Xtest=Xtest, state=state, regression=args.regression, logger=logger)
-
-        ### Generative models ###
-        if args.generative:
-            best_model = train_generative(Xtrain=Xtrain, Xvalid=Xvalid, centers=args.centers, logger=logger)
-
-            res = eval_generative(best_model=best_model, Xtest=Xtest, logger=logger)
-
-        if args.genpat:
-            best_model = train_genpat(Xtrain=Xtrain, Xvalid=Xvalid, centers=args.centers, logger=logger)
-            res = eval_genpat(best_model=best_model, Xtest=Xtest, logger=logger)
-
-
-        if args.deepset:
-            best_model = train_deepset(Xtrain=Xtrain, Xvalid=Xvalid, centers=args.centers, regression=args.regression)
-            res = eval_deepset(best_model=best_model, Xtest=Xtest, regression=args.regression, logger=logger)
+        run_pipeline(data_dir=args.dir, dims=args.dims, pc=args.pc, valid_size=args.valid, test_size=args.test, train_patients=args.train_patients, centers=args.centers, 
+                     cloudpred=args.cloudpred, linear=args.linear, generative=args.generative, genpat=args.genpat, deepset=args.deepset, transform=args.transform,
+                     regression=args.regression, figroot=args.figroot, seed=args.seed, logger=logger)
 
     except Exception as e:
         logger.exception(traceback.format_exc())
