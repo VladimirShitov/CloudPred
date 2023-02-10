@@ -105,6 +105,19 @@ def train_model(Xtrain, Xvalid, centers, regression):
     return best_model, best_score, best_centers
 
 
+def train_linear(Xtrain, Xtest, state, regression, logger):
+    linear = torch.nn.Sequential(cloudpred.utils.Aggregator(), Linear(Xtrain[0][0].shape[1], len(state)))
+    model, res = cloudpred.utils.train_classifier(Xtrain, [], [], linear, eta=1e-3, iterations=100, state=state, regression=regression)
+    model, res =  cloudpred.utils.train_classifier([], Xtest, [], model, regularize=None, iterations=1, eta=0, stochastic=True, regression=regression)
+    logger.info("        Linear Loss:          " + str(res["loss"]))
+    logger.info("        Linear Accuracy:      " + str(res["accuracy"]))
+    logger.info("        Linear Soft Accuracy: " + str(res["soft"]))
+    logger.info("        Linear AUC:           " + str(res["auc"]))
+    logger.info("        Linear R2:            " + str(res["r2"]))
+
+    return model, res
+
+
 def save_figures(figroot, Xtest, Xvalid, best_model, regression, logger):
     pathlib.Path(os.path.dirname(figroot)).mkdir(parents=True, exist_ok=True)
     torch.save(best_model, figroot + "model.pt")
@@ -280,18 +293,9 @@ def main(args=None):
 
             res = eval_cloudpred(best_model=best_model, Xtest=Xtest, best_centers=best_centers, regression=args.regression, logger=logger)
 
-
         ### Basic classifier ###
         if args.linear:
-            linear = torch.nn.Sequential(cloudpred.utils.Aggregator(), Linear(Xtrain[0][0].shape[1], len(state)))
-            model, res = cloudpred.utils.train_classifier(Xtrain, [], [], linear, eta=1e-3, iterations=100, state=state, regression=args.regression)
-            model, res =  cloudpred.utils.train_classifier([], Xtest, [], model, regularize=None, iterations=1, eta=0, stochastic=True, regression=args.regression)
-            logger.info("        Linear Loss:          " + str(res["loss"]))
-            logger.info("        Linear Accuracy:      " + str(res["accuracy"]))
-            logger.info("        Linear Soft Accuracy: " + str(res["soft"]))
-            logger.info("        Linear AUC:           " + str(res["auc"]))
-            logger.info("        Linear R2:            " + str(res["r2"]))
-
+            model, res = train_linear(Xtrain=Xtrain, Xtest=Xtest, state=state, regression=args.regression, logger=logger)
 
         ### Generative models ###
         if args.generative:
