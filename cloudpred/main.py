@@ -120,7 +120,7 @@ def save_figures(figroot, Xtest, Xvalid, best_model, regression, logger):
     best = -float("inf")
     auc = []
     res = []
-    criterion = "r2" if args.regression else "auc"
+    criterion = "r2" if regression else "auc"
     for c in range(best_model.pl.polynomial[0].centers):
         best_model.pl.polynomial[0].a.data[:, :c] = 0
         best_model.pl.polynomial[0].a.data[:, (c + 1):] = 0
