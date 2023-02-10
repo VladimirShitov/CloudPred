@@ -281,6 +281,16 @@ def train_generative(Xtrain, Xvalid, centers, logger):
     return best_model
 
 
+def eval_generative(best_model, Xtest, logger):
+    logger.debug("    Testing:")
+    res = cloudpred.generative.eval(best_model, Xtest)
+    logger.info("        Generative Accuracy:      " + str(res["accuracy"]))
+    logger.info("        Generative Soft Accuracy: " + str(res["soft"]))
+    logger.info("        Generative AUC:           " + str(res["auc"]))
+    
+    return res
+
+
 def main(args=None):
 
     # Parse command line arguments and set up logging
@@ -317,11 +327,7 @@ def main(args=None):
         if args.generative:
             best_model = train_generative(Xtrain=Xtrain, Xvalid=Xvalid, centers=centers, logger=logger)
 
-            logger.debug("    Testing:")
-            res = cloudpred.generative.eval(best_model, Xtest)
-            logger.info("        Generative Accuracy:      " + str(res["accuracy"]))
-            logger.info("        Generative Soft Accuracy: " + str(res["soft"]))
-            logger.info("        Generative AUC:           " + str(res["auc"]))
+            res = eval_generative(best_model=best_model, Xtest=Xtest, logger=logger)
 
         if args.genpat:
             best_model = None
