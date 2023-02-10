@@ -265,6 +265,22 @@ def eval_cloudpred(best_model, Xtest, best_centers, regression, logger):
     return res
 
 
+def train_generative(Xtrain, Xvalid, centers, logger):
+    best_model = None
+    best_score = -np.inf
+    for n_centers in centers:
+        model = cloudpred.generative.train(Xtrain, n_centers)
+        logger.debug("    Training:")
+        res = cloudpred.generative.eval(model, Xtrain)
+        logger.debug("    Validation")
+        res = cloudpred.generative.eval(model, Xvalid)
+        if res["accuracy"] > best_score:
+            best_model = model
+            best_score = res["accuracy"]
+
+    return best_model
+
+
 def main(args=None):
 
     # Parse command line arguments and set up logging
@@ -299,17 +315,8 @@ def main(args=None):
 
         ### Generative models ###
         if args.generative:
-            best_model = None
-            best_score = -float("inf")
-            for centers in args.centers:
-                model = cloudpred.generative.train(Xtrain, centers)
-                logger.debug("    Training:")
-                res = cloudpred.generative.eval(model, Xtrain)
-                logger.debug("    Validation")
-                res = cloudpred.generative.eval(model, Xvalid)
-                if res["accuracy"] > best_score:
-                    best_model = model
-                    best_score = res["accuracy"]
+            best_model = train_generative(Xtrain=Xtrain, Xvalid=Xvalid, centers=centers, logger=logger)
+
             logger.debug("    Testing:")
             res = cloudpred.generative.eval(best_model, Xtest)
             logger.info("        Generative Accuracy:      " + str(res["accuracy"]))
