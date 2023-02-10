@@ -91,6 +91,20 @@ def load_and_transform_data(data_dir, transform: Literal["none", "log"], pc: boo
     return Xtrain, Xvalid, Xtest, state
 
 
+
+def train_model(Xtrain, Xvalid, centers, regression):
+    best_model = None
+    best_score = np.inf
+    for n_centers in centers:
+        model, res = cloudpred.cloudpred.train(Xtrain, Xvalid, n_centers, regression=regression)
+        if res["loss"] < best_score:
+            best_model = model
+            best_score = res["loss"]
+            best_centers = n_centers
+
+    return best_model, best_score, best_centers
+
+
 def save_figures(figroot, Xtest, Xvalid, best_model, regression, logger):
     pathlib.Path(os.path.dirname(figroot)).mkdir(parents=True, exist_ok=True)
     torch.save(best_model, figroot + "model.pt")
@@ -247,15 +261,8 @@ def main(args=None):
         
         ### Train model ###
         if args.cloudpred:
-            best_model = None
-            best_score = float("inf")
-            for centers in args.centers:
-                model, res = cloudpred.cloudpred.train(Xtrain, Xvalid, centers, regression=args.regression)
-                if res["loss"] < best_score:
-                    best_model = model
-                    best_score = res["loss"]
-                    best_centers = centers
-
+            best_model, best_score, best_centers = train_model(Xtrain=Xtrain, Xvalid=Xvalid, centers=centers, regression=args.regression)
+            
             if args.figroot is not None:
                 save_figures(figroot=args.figroot, Xtest=Xtest, Xvalid=Xvalid, best_model=best_model, regression=args.regression, logger=logger)
 
