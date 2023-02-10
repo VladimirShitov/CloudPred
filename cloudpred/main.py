@@ -319,6 +319,30 @@ def eval_genpat(best_model, Xtest, logger):
     return res
 
 
+def train_deepset(Xtrain, Xvalid, centers, regression):
+    best_model = None
+    best_score = -np.inf
+
+    for n_centers in centers:
+        model, res = cloudpred.deepset.train(Xtrain, Xvalid, n_centers, regression=regression)
+        if res["accuracy"] > best_score:
+            best_model = model
+            best_score = res["accuracy"]
+
+    return best_model
+
+
+def eval_deepset(best_model, Xtest, regression, logger):
+    res = cloudpred.deepset.eval(best_model, Xtest, regression=regression)
+    logger.info("        DeepSet Loss:          " + str(res["loss"]))
+    logger.info("        DeepSet Accuracy:      " + str(res["accuracy"]))
+    logger.info("        DeepSet Soft Accuracy: " + str(res["soft"]))
+    logger.info("        DeepSet AUC:           " + str(res["auc"]))
+    logger.info("        DeepSet R2:            " + str(res["r2"]))
+
+    return res
+
+
 def main(args=None):
 
     # Parse command line arguments and set up logging
@@ -363,19 +387,8 @@ def main(args=None):
 
 
         if args.deepset:
-            best_model = None
-            best_score = -float("inf")
-            for centers in args.centers:
-                model, res = cloudpred.deepset.train(Xtrain, Xvalid, centers, regression=args.regression)
-                if res["accuracy"] > best_score:
-                    best_model = model
-                    best_score = res["accuracy"]
-            res = cloudpred.deepset.eval(best_model, Xtest, regression=args.regression)
-            logger.info("        DeepSet Loss:          " + str(res["loss"]))
-            logger.info("        DeepSet Accuracy:      " + str(res["accuracy"]))
-            logger.info("        DeepSet Soft Accuracy: " + str(res["soft"]))
-            logger.info("        DeepSet AUC:           " + str(res["auc"]))
-            logger.info("        DeepSet R2:            " + str(res["r2"]))
+            best_model = train_deepset(Xtrain=Xtrain, Xvalid=Xvalid, centers=args.centers, regression=args.regression)
+            res = eval_deepset(best_model=best_model, Xtest=Xtest, regression=args.regression, logger=logger)
 
     except Exception as e:
         logger.exception(traceback.format_exc())
