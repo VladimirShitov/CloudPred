@@ -240,6 +240,18 @@ def save_figures(figroot, Xtest, Xvalid, best_model, regression, logger):
     plt.savefig(figroot + "legend.pdf")
     
 
+def eval_cloudpred(best_model, Xtest, best_centers, regression, logger):
+    res = cloudpred.cloudpred.eval(best_model, Xtest, regression=regression)
+    logger.info("        CloudPred Loss:          " + str(res["loss"]))
+    logger.info("        CloudPred Accuracy:      " + str(res["accuracy"]))
+    logger.info("        CloudPred Soft Accuracy: " + str(res["soft"]))
+    logger.info("        CloudPred AUC:           " + str(res["auc"]))
+    logger.info("        CloudPred R2:            " + str(res["r2"]))
+    logger.info("        CloudPred Centers:       " + str(best_centers))
+
+    return res
+
+
 def main(args=None):
 
     # Parse command line arguments and set up logging
@@ -266,13 +278,7 @@ def main(args=None):
             if args.figroot is not None:
                 save_figures(figroot=args.figroot, Xtest=Xtest, Xvalid=Xvalid, best_model=best_model, regression=args.regression, logger=logger)
 
-            res = cloudpred.cloudpred.eval(best_model, Xtest, regression=args.regression)
-            logger.info("        CloudPred Loss:          " + str(res["loss"]))
-            logger.info("        CloudPred Accuracy:      " + str(res["accuracy"]))
-            logger.info("        CloudPred Soft Accuracy: " + str(res["soft"]))
-            logger.info("        CloudPred AUC:           " + str(res["auc"]))
-            logger.info("        CloudPred R2:            " + str(res["r2"]))
-            logger.info("        CloudPred Centers:       " + str(best_centers))
+            res = eval_cloudpred(best_model=best_model, Xtest=Xtest, best_centers=best_centers, regression=args.regression, logger=logger)
 
 
         ### Basic classifier ###
