@@ -364,7 +364,7 @@ def main(args=None):
         
         ### Train model ###
         if args.cloudpred:
-            best_model, best_score, best_centers = train_model(Xtrain=Xtrain, Xvalid=Xvalid, centers=centers, regression=args.regression)
+            best_model, best_score, best_centers = train_model(Xtrain=Xtrain, Xvalid=Xvalid, centers=args.centers, regression=args.regression)
             
             if args.figroot is not None:
                 save_figures(figroot=args.figroot, Xtest=Xtest, Xvalid=Xvalid, best_model=best_model, regression=args.regression, logger=logger)
@@ -377,7 +377,7 @@ def main(args=None):
 
         ### Generative models ###
         if args.generative:
-            best_model = train_generative(Xtrain=Xtrain, Xvalid=Xvalid, centers=centers, logger=logger)
+            best_model = train_generative(Xtrain=Xtrain, Xvalid=Xvalid, centers=args.centers, logger=logger)
 
             res = eval_generative(best_model=best_model, Xtest=Xtest, logger=logger)
 
