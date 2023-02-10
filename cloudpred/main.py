@@ -89,6 +89,141 @@ def load_and_transform_data(data_dir, transform: Literal["none", "log"], pc: boo
     logger.debug("Transforming data took " + str(time.time() - t))
 
     return Xtrain, Xvalid, Xtest, state
+
+
+def save_figures(figroot, Xtest, Xvalid, best_model, regression, logger):
+    pathlib.Path(os.path.dirname(figroot)).mkdir(parents=True, exist_ok=True)
+    torch.save(best_model, figroot + "model.pt")
+    with open(figroot + "Xvalid.pkl", "wb") as f:
+        pickle.dump(Xvalid, f)
+    with open(figroot + "Xtest.pkl", "wb") as f:
+        pickle.dump(Xtest, f)
+    print(best_model)
+    print(best_model.pl)
+
+    x = np.array(np.concatenate([i[0][:, :2] for i in Xtest]))
+    c = np.concatenate([i[2] for i in Xtest])
+    ct = np.unique(c)
+    print(ct)
+    print(c)
+    print(c.shape)
+    ind = -np.ones(c.shape, np.int)
+    for (i, t) in enumerate(ct):
+        ind[c == t] = i
+    print(ind)
+    color = sns.color_palette("hls", ct.size)
+    handle = [matplotlib.patches.Patch(color=color[i], label=ct[i]) for i in range(ct.size)]
+    color = np.array([list(color[i]) + [1] for i in ind])
+
+    params = copy.deepcopy(best_model.pl.state_dict())
+    ind = None
+    best = -float("inf")
+    auc = []
+    res = []
+    criterion = "r2" if args.regression else "auc"
+    for c in range(best_model.pl.polynomial[0].centers):
+        best_model.pl.polynomial[0].a.data[:, :c] = 0
+        best_model.pl.polynomial[0].a.data[:, (c + 1):] = 0
+        print(best_model.pl.polynomial[0].a)
+        res.append(cloudpred.cloudpred.eval(best_model, Xtest, regression=regression))
+        print(res[-1], flush=True)
+        if res[-1][criterion] > best:
+            ind = c
+            best = res[-1][criterion]
+        best_model.pl.load_state_dict(params)  # TODO: needs to be here for final eval
+        auc.append(res[-1][criterion])
+
+    logger.info("        Single Cluster Loss:          " + str(res[ind]["loss"]))
+    logger.info("        Single Cluster Accuracy:      " + str(res[ind]["accuracy"]))
+    logger.info("        Single Cluster Soft Accuracy: " + str(res[ind]["soft"]))
+    logger.info("        Single Cluster AUC:           " + str(res[ind]["auc"]))
+    logger.info("        Single Cluster R2:            " + str(res[ind]["r2"]))
+    logger.info("        Single Cluster Coefficients:  " + str(best_model.pl.polynomial[0].a[:, ind]))
+
+    x = torch.Tensor(np.array(np.concatenate([i[0] for i in Xtest])))
+    logp = torch.cat([c(x).unsqueeze(0) for c in best_model.mixture.component])
+    shift, _ = torch.max(logp, 0)
+    p = torch.exp(logp - shift) * best_model.mixture.weights
+    p /= torch.sum(p, 0)
+    c = np.concatenate([i[2] for i in Xtest])
+
+    for i in ct:
+        logger.info("Percent of {} Assigned to Best Cluster: {}".format(i, p[:, np.arange(c.shape[0])[c == i]].mean(1)[ind]))
+    total = torch.sum(p[ind, :])
+    for i in ct:
+        ct_total = torch.sum(p[ind, np.arange(c.shape[0])[c == i]])
+        logger.info("Percent Best Cluster Composed of {}: {}".format(i, ct_total / total))
+
+    cloudpred.utils.latexify()
+
+    import sklearn.manifold
+    fig = plt.figure(figsize=(2, 2))
+    ax = plt.gca()
+    print(x.shape)
+    perm = np.random.permutation(x.shape[0])[:5000]
+    print(x[perm, :].shape)
+    print([m.mu.detach().numpy().shape for m in best_model.mixture.component])
+    tsne = sklearn.manifold.TSNE(n_components=2).fit_transform(np.concatenate([x[perm, :]] + [np.expand_dims(m.mu.detach().numpy(), 0) for m in best_model.mixture.component]))
+    tsne, mu = tsne[:perm.shape[0], :], tsne[perm.shape[0]:, :]
+    print(tsne.shape)
+    print(perm.shape)
+    print(mu.shape)
+    print(x.shape)
+    print(color.shape)
+    plt.scatter(tsne[:, 0], tsne[:, 1], c=color[perm, :], marker=".", s=1, linewidth=0, edgecolors="none", rasterized=True)
+    plt.xticks([])
+    plt.yticks([])
+
+    xmin, xmax, ymin, ymax = plt.axis()
+    for (i, m) in enumerate(mu):
+        if i == ind:
+            c = "k"
+            zorder = 2
+            linewidth=1
+        else:
+            c = "gray"
+            zorder = 1
+            linewidth=0.5
+        e = matplotlib.patches.Ellipse(m, 0.10 * (xmax - xmin), 0.10 * (ymax - ymin),
+            angle=0, linewidth=linewidth, fill=False, zorder=zorder, edgecolor=c)
+        ax.add_patch(e)
+
+    pathlib.Path(os.path.dirname(figroot)).mkdir(parents=True, exist_ok=True)
+    plt.tight_layout()
+    plt.savefig(figroot + "tsne.pdf", dpi=600)
+
+    fig = plt.figure(figsize=(2, 2))
+    ax = plt.gca()
+
+    perm = np.random.permutation(x.shape[0])
+    print(perm)
+    plt.scatter(x[perm, 0], x[perm, 1], c=color[perm], marker=".", s=1, linewidth=0, edgecolors="none", rasterized=True)
+    plt.xticks([])
+    plt.yticks([])
+
+    for (i, m) in enumerate(best_model.mixture.component):
+        if i == ind:
+            color = "k"
+            zorder = 2
+            linewidth=1
+        else:
+            color = "gray"
+            zorder = 1
+            linewidth=0.5
+        e = matplotlib.patches.Ellipse(m.mu[:2], 3 / math.sqrt(max(abs(m.invvar[0]), 1e-5)), 3 / math.sqrt(max(abs(m.invvar[1]), 1e-5)),
+            angle=0, linewidth=linewidth, fill=False, zorder=zorder, edgecolor=color)
+        ax.add_patch(e)
+
+    pathlib.Path(os.path.dirname(figroot)).mkdir(parents=True, exist_ok=True)
+    plt.tight_layout()
+    plt.savefig(figroot + "clusters.pdf", dpi=600)
+
+    fig = plt.figure(figsize=(2, 2))
+    plt.legend(handles=handle, loc="center", fontsize="xx-small")
+    plt.title("")
+    plt.axis("off")
+    # plt.tight_layout()
+    plt.savefig(figroot + "legend.pdf")
     
 
 def main(args=None):
@@ -122,140 +257,7 @@ def main(args=None):
                     best_centers = centers
 
             if args.figroot is not None:
-                pathlib.Path(os.path.dirname(args.figroot)).mkdir(parents=True, exist_ok=True)
-                torch.save(best_model, args.figroot + "model.pt")
-                with open(args.figroot + "Xvalid.pkl", "wb") as f:
-                    pickle.dump(Xvalid, f)
-                with open(args.figroot + "Xtest.pkl", "wb") as f:
-                    pickle.dump(Xtest, f)
-                print(best_model)
-                print(best_model.pl)
-
-                x = np.array(np.concatenate([i[0][:, :2] for i in Xtest]))
-                c = np.concatenate([i[2] for i in Xtest])
-                ct = np.unique(c)
-                print(ct)
-                print(c)
-                print(c.shape)
-                ind = -np.ones(c.shape, np.int)
-                for (i, t) in enumerate(ct):
-                    ind[c == t] = i
-                print(ind)
-                color = sns.color_palette("hls", ct.size)
-                handle = [matplotlib.patches.Patch(color=color[i], label=ct[i]) for i in range(ct.size)]
-                color = np.array([list(color[i]) + [1] for i in ind])
-
-                params = copy.deepcopy(best_model.pl.state_dict())
-                ind = None
-                best = -float("inf")
-                auc = []
-                res = []
-                criterion = "r2" if args.regression else "auc"
-                for c in range(best_model.pl.polynomial[0].centers):
-                    best_model.pl.polynomial[0].a.data[:, :c] = 0
-                    best_model.pl.polynomial[0].a.data[:, (c + 1):] = 0
-                    print(best_model.pl.polynomial[0].a)
-                    res.append(cloudpred.cloudpred.eval(best_model, Xtest, regression=args.regression))
-                    print(res[-1], flush=True)
-                    if res[-1][criterion] > best:
-                        ind = c
-                        best = res[-1][criterion]
-                    best_model.pl.load_state_dict(params)  # TODO: needs to be here for final eval
-                    auc.append(res[-1][criterion])
-
-                logger.info("        Single Cluster Loss:          " + str(res[ind]["loss"]))
-                logger.info("        Single Cluster Accuracy:      " + str(res[ind]["accuracy"]))
-                logger.info("        Single Cluster Soft Accuracy: " + str(res[ind]["soft"]))
-                logger.info("        Single Cluster AUC:           " + str(res[ind]["auc"]))
-                logger.info("        Single Cluster R2:            " + str(res[ind]["r2"]))
-                logger.info("        Single Cluster Coefficients:  " + str(best_model.pl.polynomial[0].a[:, ind]))
-
-                x = torch.Tensor(np.array(np.concatenate([i[0] for i in Xtest])))
-                logp = torch.cat([c(x).unsqueeze(0) for c in best_model.mixture.component])
-                shift, _ = torch.max(logp, 0)
-                p = torch.exp(logp - shift) * best_model.mixture.weights
-                p /= torch.sum(p, 0)
-                c = np.concatenate([i[2] for i in Xtest])
-
-                for i in ct:
-                    logger.info("Percent of {} Assigned to Best Cluster: {}".format(i, p[:, np.arange(c.shape[0])[c == i]].mean(1)[ind]))
-                total = torch.sum(p[ind, :])
-                for i in ct:
-                    ct_total = torch.sum(p[ind, np.arange(c.shape[0])[c == i]])
-                    logger.info("Percent Best Cluster Composed of {}: {}".format(i, ct_total / total))
-
-                cloudpred.utils.latexify()
-
-                import sklearn.manifold
-                fig = plt.figure(figsize=(2, 2))
-                ax = plt.gca()
-                print(x.shape)
-                perm = np.random.permutation(x.shape[0])[:5000]
-                print(x[perm, :].shape)
-                print([m.mu.detach().numpy().shape for m in model.mixture.component])
-                tsne = sklearn.manifold.TSNE(n_components=2).fit_transform(np.concatenate([x[perm, :]] + [np.expand_dims(m.mu.detach().numpy(), 0) for m in model.mixture.component]))
-                tsne, mu = tsne[:perm.shape[0], :], tsne[perm.shape[0]:, :]
-                print(tsne.shape)
-                print(perm.shape)
-                print(mu.shape)
-                print(x.shape)
-                print(color.shape)
-                plt.scatter(tsne[:, 0], tsne[:, 1], c=color[perm, :], marker=".", s=1, linewidth=0, edgecolors="none", rasterized=True)
-                plt.xticks([])
-                plt.yticks([])
-
-                xmin, xmax, ymin, ymax = plt.axis()
-                for (i, m) in enumerate(mu):
-                    if i == ind:
-                        c = "k"
-                        zorder = 2
-                        linewidth=1
-                    else:
-                        c = "gray"
-                        zorder = 1
-                        linewidth=0.5
-                    e = matplotlib.patches.Ellipse(m, 0.10 * (xmax - xmin), 0.10 * (ymax - ymin),
-                     angle=0, linewidth=linewidth, fill=False, zorder=zorder, edgecolor=c)
-                    ax.add_patch(e)
-
-                pathlib.Path(os.path.dirname(args.figroot)).mkdir(parents=True, exist_ok=True)
-                plt.tight_layout()
-                plt.savefig(args.figroot + "tsne.pdf", dpi=600)
-
-
-                fig = plt.figure(figsize=(2, 2))
-                ax = plt.gca()
-
-
-                perm = np.random.permutation(x.shape[0])
-                print(perm)
-                plt.scatter(x[perm, 0], x[perm, 1], c=color[perm], marker=".", s=1, linewidth=0, edgecolors="none", rasterized=True)
-                plt.xticks([])
-                plt.yticks([])
-
-                for (i, m) in enumerate(model.mixture.component):
-                    if i == ind:
-                        color = "k"
-                        zorder = 2
-                        linewidth=1
-                    else:
-                        color = "gray"
-                        zorder = 1
-                        linewidth=0.5
-                    e = matplotlib.patches.Ellipse(m.mu[:2], 3 / math.sqrt(max(abs(m.invvar[0]), 1e-5)), 3 / math.sqrt(max(abs(m.invvar[1]), 1e-5)),
-                     angle=0, linewidth=linewidth, fill=False, zorder=zorder, edgecolor=color)
-                    ax.add_patch(e)
-
-                pathlib.Path(os.path.dirname(args.figroot)).mkdir(parents=True, exist_ok=True)
-                plt.tight_layout()
-                plt.savefig(args.figroot + "clusters.pdf", dpi=600)
-
-                fig = plt.figure(figsize=(2, 2))
-                plt.legend(handles=handle, loc="center", fontsize="xx-small")
-                plt.title("")
-                plt.axis("off")
-                # plt.tight_layout()
-                plt.savefig(args.figroot + "legend.pdf")
+                save_figures(figroot=args.figroot, Xtest=Xtest, Xvalid=Xvalid, best_model=best_model, regression=args.regression, logger=logger)
 
             res = cloudpred.cloudpred.eval(best_model, Xtest, regression=args.regression)
             logger.info("        CloudPred Loss:          " + str(res["loss"]))
