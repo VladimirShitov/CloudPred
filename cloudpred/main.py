@@ -291,6 +291,34 @@ def eval_generative(best_model, Xtest, logger):
     return res
 
 
+def train_genpat(Xtrain, Xvalid, centers, logger):
+    best_model = None
+    best_score = -np.inf
+
+    for n_centers in centers:
+        model = cloudpred.genpat.train(Xtrain, n_centers)
+        logger.debug("    Training:")
+        res = cloudpred.genpat.eval(model, Xtrain)
+        logger.debug("    Validation:")
+        res = cloudpred.genpat.eval(model, Xvalid)
+        if res["accuracy"] > best_score:
+            best_model = model
+            best_score = res["accuracy"]
+
+    return best_model
+
+
+def eval_genpat(best_model, Xtest, logger):
+    logger.debug("    Testing:")
+    res = cloudpred.genpat.eval(best_model, Xtest)
+    logger.info("        Genpat Loss:          " + str(res["ce"]))
+    logger.info("        Genpat Accuracy:      " + str(res["accuracy"]))
+    logger.info("        Genpat Soft Accuracy: " + str(res["soft"]))
+    logger.info("        Genpat AUC:           " + str(res["auc"]))
+
+    return res
+
+
 def main(args=None):
 
     # Parse command line arguments and set up logging
@@ -330,23 +358,8 @@ def main(args=None):
             res = eval_generative(best_model=best_model, Xtest=Xtest, logger=logger)
 
         if args.genpat:
-            best_model = None
-            best_score = -float("inf")
-            for centers in args.centers:
-                model = cloudpred.genpat.train(Xtrain, centers)
-                logger.debug("    Training:")
-                res = cloudpred.genpat.eval(model, Xtrain)
-                logger.debug("    Validation:")
-                res = cloudpred.genpat.eval(model, Xvalid)
-                if res["accuracy"] > best_score:
-                    best_model = model
-                    best_score = res["accuracy"]
-            logger.debug("    Testing:")
-            res = cloudpred.genpat.eval(best_model, Xtest)
-            logger.info("        Genpat Loss:          " + str(res["ce"]))
-            logger.info("        Genpat Accuracy:      " + str(res["accuracy"]))
-            logger.info("        Genpat Soft Accuracy: " + str(res["soft"]))
-            logger.info("        Genpat AUC:           " + str(res["auc"]))
+            best_model = train_genpat(Xtrain=Xtrain, Xvalid=Xvalid, centers=args.centers, logger=logger)
+            res = eval_genpat(best_model=best_model, Xtest=Xtest, logger=logger)
 
 
         if args.deepset:
