@@ -343,9 +343,13 @@ def eval_deepset(best_model, Xtest, regression, logger):
     return res
 
 
-def run_pipeline(data_dir, dims, pc, valid_size, test_size, train_patients, centers, regression, transform, cloudpred, linear, generative, genpat, deepset, seed, figroot, logger=None):
+def run_pipeline(data_dir, centers=[5], dims=100, pc=50, valid_size=.25, test_size=.25, train_patients=None, regression=False, transform="log",
+                 cloudpred=True, linear=False, generative=False, genpat=False, deepset=False, seed=0, figroot=None, logger=None):
     if logger is None:
         logger = logging.getLogger(__name__)
+
+    if figroot is None:
+        figroot = data_dir
 
     # Seeding RNGs
     random.seed(seed)
