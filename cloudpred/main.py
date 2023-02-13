@@ -380,7 +380,7 @@ def run_pipeline(data_dir, dims, pc, valid_size, test_size, train_patients, cent
         res = eval_genpat(best_model=best_model, Xtest=Xtest, logger=logger)
 
 
-    if args.deepset:
+    if deepset:
         best_model = train_deepset(Xtrain=Xtrain, Xvalid=Xvalid, centers=centers, regression=regression)
         res = eval_deepset(best_model=best_model, Xtest=Xtest, regression=regression, logger=logger)
 
