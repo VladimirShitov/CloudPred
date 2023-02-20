@@ -357,7 +357,7 @@ def run_pipeline(data_dir, centers=[5], dims=100, pc=50, valid_size=.25, test_si
     torch.manual_seed(seed)
 
     Xtrain, Xvalid, Xtest, state = load_and_transform_data(
-        data_dir=data_dir, transform=transform, pc=pc, dims=dims, valid_size=valid_size, 
+        data_dir=data_dir, transform=transform, pc=pc, dims=dims, valid_size=valid_size, seed=seed,
         test_size=test_size, train_patients=train_patients, figroot=figroot, logger=logger)
     
     ### Train model ###
